@@ -1,169 +1,181 @@
 # Customer Churn Prediction & Retention Strategy
 
-Most churn prediction projects stop at the model. They output a probability score, show an AUC-ROC curve and call it done. The business question — which customers should we actually spend money on, and how much, and what should we do differently based on their risk level — goes unanswered.
-
-I built this project to answer both halves. The model was the starting point, not the deliverable.
+**5,630 customers. 24.7% churn rate. $2.7 million in annual revenue at risk. A $23,357 retention budget that was projected to save $503,848. This project built the model, scored every customer, designed the intervention plan and calculated the ROI — end to end.**
 
 ---
 
-## What I set out to do
+## 1. Project Overview
 
-I worked with 5,630 customer records from an e-commerce platform and built a full pipeline from raw data through to a retention investment plan with ROI numbers that could go directly to a leadership meeting. Four classification models trained and compared, the best one selected, every customer scored and grouped into risk tiers, and then a financial model that showed exactly how much revenue was at risk, what the intervention cost and what the expected return was.
+I built this project around a question most e-commerce businesses avoid answering directly: which specific customers are about to leave, and what is the cheapest way to stop them?
 
-The financial model at the end was the part I spent the most time on. Predicting churn is a solved problem at this point. Turning that into "spend $23,357 on these specific customers using these specific interventions and expect to save $503,848 in annual revenue" — that is what stakeholders can actually act on.
+The common approach is to react — a customer cancels, you send a win-back email. This project took the opposite direction. Using 5,630 customer records with 21 features covering behaviour, purchase history, complaints and satisfaction, I trained four classification models to predict churn probability before it happened. Every customer ended up with a probability score and a risk tier. The final output was not a model — it was a retention investment plan with costs and expected savings per segment that could go directly to a marketing team.
+
+The best model was Logistic Regression at 0.8072 AUC-ROC, selected over XGBoost not just because the headline score was higher but because the 5-fold cross-validation variance was the tightest (±0.004 versus ±0.015 for XGBoost), meaning it generalised more reliably to new customers.
 
 ---
 
-## Results
+## 2. Business Problem
 
-**Model performance**
+The business knew its total churn rate was around 25%. What it did not know was which 25% — and more importantly, which of those customers were worth spending money to retain versus which ones were going to churn regardless.
+
+Treating all at-risk customers identically was expensive and ineffective. Spending $20 on personal outreach for a customer generating $89 per month was a completely different financial decision from spending $20 on someone paying $40. The model had to do two things: predict who was going to leave, and rank them in a way that let the business allocate retention spend based on expected return.
+
+The threshold decision mattered more than most churn model writeups acknowledge. At the default 0.50 threshold, the model missed too many actual churners — and in this problem, missing a churner was 10 times more expensive than spending on someone who was not going to leave anyway. The business-cost-minimising threshold came out at 0.21, which is what I used for the final risk segmentation.
+
+---
+
+## 3. Dashboard Preview
+
+| Visual | What it shows |
+|:---|:---|
+| ![Churn Distribution](visuals/1_churn_distribution.png) | Overall churn rate breakdown — 24.7% across 5,630 customers |
+| ![Churn by Category](visuals/2_churn_by_category.png) | Churn rate by login device, payment mode, marital status and other categorical features |
+| ![Numeric vs Churn](visuals/3_numeric_vs_churn.png) | Tenure, satisfaction, recency and order count distributions for churned vs retained |
+| ![Complaint Impact](visuals/4_complain_vs_churn.png) | How filing a complaint changes churn probability |
+| ![Engineered Features](visuals/5_engineered_features.png) | CLV proxy, tenure groups and engagement score distributions |
+| ![AUC-ROC Curves](visuals/6_auc_roc.png) | ROC curves for all four models — Logistic Regression, Decision Tree, Random Forest, XGBoost |
+| ![Confusion Matrices](visuals/7_confusion_matrices.png) | Confusion matrices for all four models side by side |
+| ![Feature Importance](visuals/8_feature_importance.png) | Random Forest and XGBoost feature importance — top 10 churn drivers |
+| ![Threshold Optimisation](visuals/9_threshold_optimisation.png) | F1 score and business cost curves across threshold values |
+| ![Risk Segmentation](visuals/10_risk_segmentation.png) | All 5,630 customers split into High, Medium and Low risk tiers |
+| ![Intervention Plan](visuals/11_intervention_plan.png) | Retention action and cost per segment |
+| ![ROI Analysis](visuals/12_roi_analysis.png) | Revenue at risk, intervention budget and expected savings by segment |
+| ![Executive Dashboard](visuals/13_executive_dashboard.png) | All key metrics on one page for leadership review |
+
+---
+
+## 4. Key Business Insights
+
+**The model achieved 0.8072 AUC-ROC — firmly in the "very good" range.**
+
+Four models were trained and compared. Logistic Regression came out on top:
 
 | Model | AUC-ROC | F1 Score | CV AUC (5-fold) |
 |:---|:---|:---|:---|
-| Logistic Regression | **0.8072** | 0.5585 | 0.8178 ± 0.004 |
+| **Logistic Regression** | **0.8072** | **0.5585** | **0.8178 ± 0.004** |
 | XGBoost | 0.7817 | 0.5240 | 0.7944 ± 0.015 |
 | Random Forest | 0.7783 | 0.5191 | 0.7905 ± 0.014 |
 | Decision Tree | 0.7516 | 0.5241 | 0.7244 ± 0.023 |
 
-Logistic Regression won at 0.8072 AUC-ROC. What made it the right choice beyond the headline number was the 5-fold cross-validation variance — ±0.004 was the tightest of the four models, meaning it generalised well rather than fitting the training data closely and performing worse on new customers. XGBoost had a higher peak on some runs but a much wider variance band.
+The cross-validation variance column was what settled the decision. XGBoost had a higher peak on some runs, but its ±0.015 variance band was nearly four times wider than Logistic Regression's ±0.004. A model that generalises more consistently to unseen customers was more useful here than one that had a higher ceiling but wider variance.
 
-**Customer risk breakdown**
+**Tenure was the single most important churn predictor.**
 
-| Risk Tier | Customers | Actual Churn Rate | Avg Monthly Revenue |
-|:---|:---|:---|:---|
-| High Risk (prob ≥ 70%) | 1,147 (20.4%) | 60.2% | $68.58 |
-| Medium Risk (prob 30–70%) | 2,259 (40.1%) | 25.5% | $65.88 |
-| Low Risk (prob < 30%) | 2,224 (39.5%) | 5.6% | $63.90 |
+The Random Forest feature importance showed Tenure at the top (0.1805), followed by the CLV Proxy I engineered (0.1390) and Satisfaction Score (0.1194). New customers — those in their first six months — churned at significantly higher rates than established ones. This pointed to the onboarding period as the highest-leverage retention window, not the long-tenure customers a lot of retention campaigns target.
 
-**The financial case**
+The top 10 churn drivers in order:
 
-```
-Annual revenue at risk (High + Medium Risk customers)   →  $2,729,704
-Total retention intervention cost                       →     $23,357
-Expected annual revenue saved (conservative estimates)  →    $503,848
-Net benefit                                             →    $480,491
-ROI                                                     →      2,057%
-
-Every $1 spent on retention recovered $21.57 in revenue.
-```
-
----
-
-## What actually drove churn
-
-These came from the Random Forest feature importance scores. I found each one was actionable, which was the criterion I used to decide whether to include it in the business section:
-
-| Feature | Importance | What the data suggested |
+| Feature | Importance | What it means |
 |:---|:---|:---|
-| Tenure | 0.1805 | New customers (0–6 months) churned at the highest rate — the onboarding period was the biggest retention risk |
-| CLV Proxy | 0.1390 | Low-lifetime-value customers churned more — the model was partly picking up acquisition quality |
-| Satisfaction Score | 0.1194 | Low scorers churned heavily — satisfaction recovery needed to be immediate, not at the next quarterly review |
-| Complaints | 0.0866 | Filing a complaint was a major risk signal regardless of how it was resolved |
-| Cashback Amount | 0.0550 | Lower cashback engagement correlated with lower stickiness to the platform |
-| Days Since Last Order | 0.0499 | A customer going quiet was an early warning sign even before satisfaction scores dropped |
+| Tenure | 0.1805 | Short-tenure customers churn most — fix onboarding first |
+| CLV Proxy | 0.1390 | Low lifetime value customers are harder to retain |
+| Satisfaction Score | 0.1194 | Low scorers churn heavily and predictably |
+| Complain | 0.0866 | Filing a complaint is a major risk signal regardless of resolution |
+| Cashback Amount | 0.0550 | Lower cashback engagement = lower stickiness |
+| Monthly Charges | 0.0529 | Price sensitivity at lower spend levels |
+| Engagement Score | 0.0512 | Composite of app time, orders and coupons used |
+| Days Since Last Order | 0.0499 | Recency matters — going quiet is an early warning |
+| Warehouse to Home | 0.0498 | Delivery time friction affects retention |
+| Hours Spent on App | 0.0357 | Low app usage correlates with disengagement |
 
-The complaints finding was the one worth flagging separately. Customers who filed a complaint and received a low satisfaction score were the highest immediate churn risk in the dataset — an action that could be taken without waiting for any model output, by any CRM team that already tracked complaint resolution.
+**The complaint signal stood out on its own.** Customers who filed a complaint and received a low satisfaction score were among the highest immediate churn risk in the dataset. This signal does not require a model — a CRM team monitoring complaint resolution today could act on it without waiting for weekly scoring runs.
 
----
+**Risk segmentation across all 5,630 customers:**
 
-## The dataset
-
-- 5,630 customers across 21 features
-- 24.7% churn rate (1,393 churned customers)
-- E-commerce platform — customers across East Africa, Middle East, Europe and North America
-- Behavioural signals, order history, satisfaction scores, complaint data, demographics
-
-**Columns used in training (16 features after engineering):**
-
-```
-Behavioural:    Tenure, HourSpendOnApp, DaySinceLastOrder, OrderCount, CouponUsed
-Financial:      MonthlyCharges, CashbackAmount, OrderAmountHikeFromLastYear
-Satisfaction:   SatisfactionScore, Complain
-Demographic:    CityTier, WarehouseToHome, NumberOfDeviceRegistered, NumberOfAddress
-Categorical:    PreferredLoginDevice, PreferredPaymentMode, Gender, MaritalStatus, PreferedOrderCat
-Engineered:     CLV_Proxy (Tenure × MonthlyCharges), EngagementScore (composite)
-```
-
----
-
-## Feature engineering
-
-I added five features that were not in the raw data but carried meaningful signal when I looked at how churn rates split across different customer segments:
-
-```python
-# Customer Lifetime Value proxy — simple but effective
-df['CLV_Proxy'] = df['Tenure'] * df['MonthlyCharges']
-
-# Composite engagement score
-df['EngagementScore'] = (
-    df['HourSpendOnApp'] * 2 +
-    df['OrderCount'] * 1.5 +
-    df['CouponUsed'] * 0.5 -
-    df['DaySinceLastOrder'] * 0.3
-)
-
-# Tenure buckets — churn rates differed significantly between groups
-# New (0-6m):       1,744 customers — highest churn risk
-# Growing (7-18m):  2,050 customers
-# Established (19-36m): 1,173 customers
-# Loyal (36m+):       663 customers — lowest churn risk
-
-# Rule-based high risk flag — fast pre-screen for CRM teams
-df['HighRiskFlag'] = (
-    (df['SatisfactionScore'] <= 2) |
-    (df['Complain'] == 1) |
-    (df['DaySinceLastOrder'] >= 10)
-).astype(int)
-```
-
-The CLV_Proxy ended up being the second most important feature at 0.139 importance. It is a simple calculation — tenure multiplied by monthly charges — but it captured something important. A customer with 3 months tenure paying $100 per month looked very different from one with 36 months at $30 per month, even if their current behaviour looked similar in the raw features.
-
----
-
-## The threshold decision
-
-The default 0.5 classification threshold was not the right choice for this problem and I did not use it.
-
-The asymmetry in costs made this clear. Missing a customer who was going to churn — a false negative — cost the business roughly $50 in lost annual revenue per customer. Spending on retention for someone who was not going to leave — a false positive — cost around $5 in campaign spend. With that cost ratio, the model should be set to catch more true positives even at the cost of more false positives.
-
-I modelled this explicitly and found that the business-cost-minimising threshold was **0.21**, not 0.50. This is what I used for the risk segmentation and retention plan. It captured significantly more true positives and the math supported the trade-off.
-
----
-
-## Retention plan
-
-The scored customer list was the input to a retention investment plan, not the final output.
-
-| Risk Tier | Revenue Profile | Intervention | Cost per Customer |
+| Risk Tier | Customers | Share | Actual Churn Rate |
 |:---|:---|:---|:---|
-| High Risk + High Revenue (≥$65/mo) | 617 customers | Personal outreach + loyalty discount | $20 |
-| High Risk + Low Revenue (<$65/mo) | 530 customers | Automated email + cashback offer | $8 |
-| Medium Risk | 2,259 customers | Monthly engagement campaign | $3 |
-| Low Risk — New Customers | 210 customers | Onboarding programme | $1 |
-| Low Risk — Established | 2,014 customers | Newsletter + recommendations | $1 |
+| High Risk | 1,147 | 20.4% | 60.2% |
+| Medium Risk | 2,259 | 40.1% | 25.5% |
+| Low Risk | 2,224 | 39.5% | 5.6% |
 
-The split between High Risk + High Revenue and High Risk + Low Revenue was a deliberate design choice. Spending $20 on personal outreach for a customer generating $89 per month made clear financial sense. Spending $20 on someone paying $40 per month did not. The model gave the targeting; the intervention design reflected the expected return from each segment.
+**The retention plan converted the model output into a spending decision:**
+
+| Segment | Customers | Intervention | Cost | Total Budget |
+|:---|:---|:---|:---|:---|
+| High Risk, High Revenue (≥$65/mo) | 617 | Personal outreach + loyalty discount | $20 | $12,340 |
+| High Risk, Low Revenue (<$65/mo) | 530 | Automated email + cashback offer | $8 | $4,240 |
+| Medium Risk | 2,259 | Engagement campaign | $3 | $6,777 |
+| Low Risk — New Customers | 210 | Onboarding programme | $1 | $210 |
+| Low Risk — Established | 2,014 | Newsletter + recommendations | $1 | $2,014 |
+
+**The ROI calculation used conservative assumptions — 25% success rate for High Risk, 15% for Medium Risk:**
+
+| | High Risk | Medium Risk | Total |
+|:---|:---|:---|:---|
+| Annual Revenue at Risk | $943,924 | $1,785,780 | $2,729,704 |
+| Retention Budget | $16,580 | $6,777 | $23,357 |
+| Expected Revenue Saved | $235,981 | $267,867 | $503,848 |
+| Net Benefit | | | **$480,491** |
+
+Every $1 spent on retention was projected to recover $21.57 in annual revenue at the conservative success rates used. The cost of not acting was significantly higher than the cost of running the campaign.
 
 ---
 
-## Project structure
+## 5. Project Architecture
+
+```
+Raw CSV (5,630 customer records)
+        ↓
+Data Quality Audit — missing values, duplicates, negative checks
+        ↓
+Median Imputation — Tenure, HourSpendOnApp,
+                    OrderAmountHikeFromLastYear, DaySinceLastOrder
+        ↓
+Feature Engineering — CLV_Proxy, TenureGroup,
+                      RevenueSegment, EngagementScore, HighRiskFlag
+        ↓
+Preprocessing — OrdinalEncoder (categoricals), StandardScaler,
+                80/20 stratified train-test split
+        ↓
+Model Training — Logistic Regression, Decision Tree,
+                  Random Forest, XGBoost
+        ↓
+Model Selection — AUC-ROC + CV variance (Logistic Regression wins)
+        ↓
+Threshold Optimisation — F1-optimal (0.62) vs business-cost (0.21)
+        ↓
+Full Customer Scoring — all 5,630 customers scored and tiered
+        ↓
+Retention Plan & ROI Model
+        ↓
+Exports — clean CSV, Power BI dataset, model .pkl, visuals
+```
+
+**Why the threshold mattered.** At the default 0.50 threshold, the model was too conservative — it missed actual churners to avoid false positives. Given that the cost of missing a churner was estimated at roughly 10 times the cost of an unnecessary retention spend, shifting the threshold down to 0.21 was the financially correct decision. The threshold optimisation chart showed this crossover point explicitly so the choice was transparent rather than arbitrary.
+
+---
+
+## 6. Tech Stack
+
+| Tool | Role |
+|:---|:---|
+| Python | End-to-end pipeline |
+| pandas, NumPy | Data cleaning, feature engineering, scoring |
+| scikit-learn | Logistic Regression, Decision Tree, Random Forest, preprocessing, cross-validation |
+| XGBoost | Gradient boosting model |
+| Matplotlib, Seaborn | All 13 visualisations |
+| pickle | Model serialisation for production use |
+| Jupyter Notebook | Interactive analysis environment |
+
+---
+
+## 7. Repository Structure
 
 ```
 customer-churn-prediction/
 │
-├── Customer_Churn_Prediction_Model.ipynb      # Main notebook — 15 sections
+├── Customer_Churn_Prediction_Model.ipynb   # Main notebook — 15 sections
 │
 ├── data/
 │   ├── raw/
-│   │   └── ecommerce_churn.csv                # Raw dataset (5,630 records)
+│   │   └── ecommerce_churn.csv              # Source data (5,630 rows)
 │   └── processed/
-│       ├── ecommerce_churn_clean.csv          # Cleaned + engineered features
-│       ├── ecommerce_churn_powerbi.csv        # Includes ChurnProbability + RiskTier
-│       └── model_performance_summary.csv      # All 4 model metrics
+│       ├── ecommerce_churn_clean.csv         # Cleaned + engineered features
+│       └── ecommerce_churn_powerbi.csv       # Includes ChurnProbability + RiskTier
 │
 ├── models/
-│   ├── best_churn_model.pkl                   # Trained Logistic Regression + scaler
-│   └── churn_model.pkl                        # Production-ready model artifact
+│   ├── best_churn_model.pkl                  # Trained Logistic Regression + scaler
+│   └── churn_model.pkl                       # Production-ready model artifact
 │
 ├── visuals/
 │   ├── 1_churn_distribution.png
@@ -185,31 +197,16 @@ customer-churn-prediction/
 
 ---
 
-## How to run it
+## 8. Export Files
 
-```bash
-git clone https://github.com/PatienceAnono/customer-churn-prediction.git
-cd customer-churn-prediction
-pip install -r requirements.txt
-jupyter notebook Customer_Churn_Prediction_Model.ipynb
-```
+| File | Rows | What it contains |
+|:---|:---|:---|
+| `ecommerce_churn_clean.csv` | 5,630 | Cleaned dataset with all engineered features — ready for retraining |
+| `ecommerce_churn_powerbi.csv` | 5,630 | Includes `ChurnProbability` and `RiskTier` columns for Power BI or Looker Studio |
+| `model_performance_summary.csv` | 4 | AUC-ROC, F1 and CV AUC for all four models — useful for model comparison documentation |
+| `best_churn_model.pkl` | — | Serialised Logistic Regression model with fitted scaler and label encoders — load and score without retraining |
 
-The notebook runs top to bottom without any manual steps between sections. Output directories for visuals, processed data and models are created automatically on first run.
-
-```
-pandas>=1.5.0
-numpy>=1.23.0
-scikit-learn>=1.1.0
-xgboost>=1.7.0
-matplotlib>=3.6.0
-seaborn>=0.12.0
-```
-
----
-
-## Loading the saved model
-
-To use the trained model directly without rerunning the full notebook:
+**Loading the saved model without retraining:**
 
 ```python
 import pickle
@@ -223,45 +220,72 @@ scaler   = bundle['scaler']
 features = bundle['features']
 le_dict  = bundle['le_dict']
 
-# Score new customers
-# X_new should be a DataFrame with the same columns as features
-# Encode categoricals with le_dict, then scale with scaler:
+# X_new = DataFrame with same columns as features
+# Encode categoricals with le_dict, scale with scaler, then:
 churn_proba = model.predict_proba(X_new_scaled)[:, 1]
 ```
 
-The bundle contained everything needed to reproduce the preprocessing pipeline — label encoders for each categorical column, the StandardScaler fitted on training data, and the feature list in the correct order. Nothing needed to be retrained or manually reconstructed.
+---
+
+## 9. How to Run the Project
+
+**1. Clone the repository**
+
+```bash
+git clone https://github.com/PatienceAnono/customer-churn-prediction.git
+cd customer-churn-prediction
+```
+
+**2. Install dependencies**
+
+```bash
+pip install pandas numpy scikit-learn xgboost matplotlib seaborn jupyter
+```
+
+**3. Place the data file**
+
+Put the source CSV at:
+```
+data/raw/ecommerce_churn.csv
+```
+
+**4. Run the notebook**
+
+```bash
+jupyter notebook Customer_Churn_Prediction_Model.ipynb
+```
+
+Run all cells from top to bottom. Output directories (`visuals/`, `models/`, `data/processed/`) are created automatically. The full run takes approximately 2–3 minutes.
+
+**Expected dataset columns:**
+
+```
+CustomerID, Churn, Tenure, PreferredLoginDevice, CityTier,
+WarehouseToHome, PreferredPaymentMode, Gender, HourSpendOnApp,
+NumberOfDeviceRegistered, PreferedOrderCat, SatisfactionScore,
+MaritalStatus, NumberOfAddress, Complain, OrderAmountHikeFromLastYear,
+CouponUsed, OrderCount, DaySinceLastOrder, CashbackAmount, MonthlyCharges
+```
 
 ---
 
-## Notebook walkthrough — 15 sections
+## 10. Future Improvements
 
-1. **Executive Summary** — the business question and headline results, written before the technical sections so a stakeholder could read section 1 and understand the project without reading the rest
-2. **Setup** — libraries, colour palette, output directory creation
-3. **Data Loading & Cleaning** — quality audit, missing value treatment, validation checks
-4. **EDA** — churn rates by category, numeric feature distributions, complaint analysis
-5. **Feature Engineering** — CLV proxy, tenure groups, engagement score, high risk flag
-6. **Preprocessing & Training** — 80/20 stratified split, label encoding, StandardScaler, all four models trained
-7. **Model Evaluation** — ROC curves, confusion matrices, classification reports side by side
-8. **Feature Importance** — Random Forest and XGBoost importance scores with business interpretation
-9. **Threshold Optimisation** — F1-optimal vs business-cost-optimal threshold comparison with explicit cost modelling
-10. **Risk Segmentation** — all 5,630 customers scored and assigned to High/Medium/Low tiers
-11. **Retention Plan** — intervention type and cost per customer based on risk tier and revenue level
-12. **ROI Analysis** — revenue at risk, expected savings, net benefit, full financial model
-13. **Executive Dashboard** — single-page summary combining all key metrics into one chart
-14. **Recommendations** — immediate actions, 90-day roadmap, model maintenance schedule
-15. **Export** — cleaned CSV, Power BI dataset, model performance summary, saved model
+**1. Add SHAP values for individual prediction explanations.**
+The feature importance chart shows which variables mattered most across all 5,630 customers. SHAP (SHapley Additive exPlanations) would show why the model made a specific prediction for a specific customer — useful for customer success teams who need to understand why an account was flagged as high risk before making a call.
+
+**2. Build a weekly automated scoring pipeline.**
+The model currently scores customers in a batch when the notebook runs. A production version would connect to the live database, pull updated customer behaviour weekly and write a refreshed risk tier back to the CRM. The model artifact is already saved as a `.pkl` file — the pipeline wrapper is the remaining work.
+
+**3. Track retention campaign outcomes and retrain.**
+The ROI calculation used assumed success rates of 25% for High Risk and 15% for Medium Risk. Once the retention campaigns run, actual success rates become available. Retraining the model on updated data — including which at-risk customers responded to intervention — would improve both the model accuracy and the financial projections over time.
+
+**4. Segment the churn analysis by product category.**
+The current model treated all customers the same regardless of what they bought. Customers in Electronics may have different churn drivers than customers in Beauty & Skincare. Separate models or a model with product category interaction terms could improve targeting precision for category-specific campaigns.
 
 ---
 
-## A note on the ROI numbers
-
-The 2,057% ROI used conservative assumptions — 25% retention success rate for High Risk customers and 15% for Medium Risk. These were deliberately conservative. If the retention team executed well, the numbers would be higher. If campaign execution was weak, lower.
-
-What the numbers were not sensitive to was the direction of the finding. $23,357 in intervention spend against $2.7 million in annual revenue at risk was a ratio that held up even with significantly more pessimistic assumptions about retention success rates. The cost of not acting was the more important number in that calculation.
-
----
-
-*Dataset is synthetic, built for analytical demonstration. The modelling methodology, threshold analysis, feature engineering and business logic are real.*
+*Dataset is from a publicly available e-commerce customer behaviour source used for analytical demonstration. All modelling methodology, feature engineering, threshold analysis and business recommendations are original work.*
 
 ---
 
